@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
 # ==========================================
 # 2. EXTRACCIÓN DE DATOS Y CACHÉ
 # ==========================================
@@ -49,6 +48,11 @@ except Exception as e:
 # 3. CONTEXTO Y NARRATIVA
 # ==========================================
 st.title("🎮 Informe Ejecutivo: Estado de la Industria de Videojuegos")
+st.markdown("""
+Bienvenido al panel analítico interactivo. Este reporte evalúa el estado del arte de la industria 
+de los videojuegos mediante la correlación de puntuaciones de la crítica, recepción de los usuarios 
+y datos históricos. **Utilice la barra lateral para ajustar el alcance del análisis.**
+""")
 st.markdown("---")
 
 # ==========================================
@@ -83,21 +87,16 @@ selected_genres = st.sidebar.multiselect(
 )
 
 # -- LÓGICA DE FILTRADO CRUZADO --
-# 1. Filtro Base (Años y Votos)
 df_base = df_raw[
     (df_raw["ratings_count"] >= min_votes) & (df_raw["year"].isin(selected_years))
 ]
 
-
-# Función auxiliar para filtrar strings separados por coma
 def filter_by_list(df, column, selected_items):
     if not selected_items:
         return df
     pattern = "|".join([f"(?i){item}" for item in selected_items])
     return df[df[column].fillna("").str.contains(pattern)]
 
-
-# 2. Crear DataFrames específicos según las reglas solicitadas
 df_plat = filter_by_list(df_base, "platforms", selected_platforms)  # Afecta 1
 df_gen = filter_by_list(df_base, "genres", selected_genres)  # Afecta 4
 df_both = filter_by_list(df_plat, "genres", selected_genres)  # Afecta 2 y 3
@@ -158,7 +157,7 @@ if not df_both.empty:
     top_10 = df_both.sort_values(
         by=["metacritic", "rating_scaled"], ascending=[False, False]
     ).head(10)
-    # Mostramos una tabla estilizada
+    
     st.dataframe(
         top_10[["name", "year", "metacritic", "rating", "genres", "platforms"]],
         column_config={
@@ -185,6 +184,8 @@ st.markdown("---")
 # 7. GRÁFICA 1: CALIDAD POR GÉNERO (Usa df_plat)
 # ==========================================
 st.header("1. Calidad por Género")
+st.markdown("**Objetivo:** Identificar qué categorías de videojuegos mantienen consistentemente los estándares de calidad más altos según la crítica (Metacritic). Esto nos permite entender qué nichos de desarrollo son los más premiados de la industria.")
+
 genre_avg = df_plat.groupby("genres")["metacritic"].agg(["mean", "count"]).reset_index()
 genre_avg = (
     genre_avg[genre_avg["count"] > 2].sort_values(by="mean", ascending=True).tail(12)
@@ -192,15 +193,19 @@ genre_avg = (
 
 if not genre_avg.empty:
     fig_genres = px.bar(
-        genre_avg,
-        x="mean",
-        y="genres",
-        orientation="h",
-        color="mean",
-        color_continuous_scale="Viridis",
-        labels={"mean": "Score Promedio (Metacritic)", "genres": "Género"},
+        genre_avg, x='mean', y='genres', orientation='h', 
+        color='mean', color_continuous_scale='Viridis',
+        labels={'mean': 'Score Promedio (Metacritic)', 'genres': 'Género'},
+        text='mean' 
     )
+    fig_genres.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    fig_genres.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', margin=dict(r=50))
     st.plotly_chart(fig_genres, use_container_width=True)
+    
+    # Análisis dinámico
+    best_genre = genre_avg.iloc[-1]['genres']
+    best_genre_score = genre_avg.iloc[-1]['mean']
+    st.info(f"💡 **Insight:** Bajo los filtros actuales, los juegos etiquetados como **'{best_genre}'** dominan la crítica con un puntaje promedio de **{best_genre_score:.1f}**. Este género representa el estándar de oro actual en cuanto a recepción especializada.")
 else:
     st.warning("Datos insuficientes para la gráfica 1.")
 
@@ -208,6 +213,8 @@ else:
 # 8. GRÁFICA 2: TENDENCIAS TEMPORALES (Usa df_both)
 # ==========================================
 st.header("2. Evolución Histórica de la Calidad")
+st.markdown("**Objetivo:** Contrastar cómo ha evolucionado el score promedio a lo largo de los años en relación con el volumen de juegos producidos. Ayuda a verificar si la 'época dorada' de los videojuegos es un mito o una realidad estadística.")
+
 yearly_stats = (
     df_both.groupby("year")
     .agg(avg_metacritic=("metacritic", "mean"), games_count=("id", "count"))
@@ -218,25 +225,22 @@ if not yearly_stats.empty:
     fig_trends = make_subplots(specs=[[{"secondary_y": True}]])
     fig_trends.add_trace(
         go.Scatter(
-            x=yearly_stats["year"],
-            y=yearly_stats["avg_metacritic"],
-            name="Score Promedio",
-            line=dict(color="orange", width=3),
-        ),
-        secondary_y=False,
+            x=yearly_stats["year"], y=yearly_stats["avg_metacritic"],
+            name="Score Promedio", line=dict(color="orange", width=3),
+        ), secondary_y=False,
     )
     fig_trends.add_trace(
         go.Bar(
-            x=yearly_stats["year"],
-            y=yearly_stats["games_count"],
-            name="Volumen",
-            opacity=0.3,
-            marker_color="blue",
-        ),
-        secondary_y=True,
+            x=yearly_stats["year"], y=yearly_stats["games_count"],
+            name="Volumen de Lanzamientos", opacity=0.3, marker_color="blue",
+        ), secondary_y=True,
     )
     fig_trends.update_layout(hovermode="x unified")
     st.plotly_chart(fig_trends, use_container_width=True)
+    
+    # Análisis dinámico
+    best_year_row = yearly_stats.loc[yearly_stats["avg_metacritic"].idxmax()]
+    st.success(f"📈 **Conclusión:** El año **{int(best_year_row['year'])}** representa un pico histórico en calidad, con un score promedio de **{best_year_row['avg_metacritic']:.1f}** basado en **{int(best_year_row['games_count'])}** títulos registrados bajo este filtro.")
 else:
     st.warning("Datos insuficientes para la gráfica 2.")
 
@@ -244,25 +248,44 @@ else:
 # 9. GRÁFICA 3: CRÍTICA VS COMUNIDAD (Usa df_both)
 # ==========================================
 st.header("3. Matriz de Consenso: Crítica vs Comunidad")
+st.markdown("**Objetivo:** Explorar la polarización de la industria. La línea punteada representa el 'consenso absoluto'. Los puntos alejados de esta línea revelan la desconexión entre la prensa especializada y los jugadores. El tamaño del círculo representa la cantidad de votos.")
+
 if not df_both.empty:
     fig_scatter = px.scatter(
-        df_both,
-        x="metacritic",
-        y="rating_scaled",
-        size="ratings_count",
-        hover_name="name",
-        color="discrepancy",
-        color_continuous_scale="Reds",
+        df_both, x="metacritic", y="rating_scaled",
+        size="ratings_count", hover_name="name",
+        color="discrepancy", color_continuous_scale="Reds",
         labels={
-            "rating_scaled": "Rating Comunidad (0-100)",
-            "metacritic": "Score Crítica",
-            "discrepancy": "Discrepancia",
+            "rating_scaled": "Rating Comunidad (Escalado 0-100)",
+            "metacritic": "Score Crítica (Metacritic)",
+            "discrepancy": "Grado de Discrepancia",
         },
     )
     fig_scatter.add_shape(
         type="line", x0=20, y0=20, x1=100, y1=100, line=dict(color="gray", dash="dash")
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
+    
+    # Análisis dinámico y Outliers
+    overrated = df_both[(df_both["metacritic"] > 80) & (df_both["rating_scaled"] < 65)].head(1)
+    cult_classic = df_both[(df_both["metacritic"] < 75) & (df_both["rating_scaled"] > 80)].head(1)
+    
+    col_out1, col_out2 = st.columns(2)
+    with col_out1:
+        st.error("📉 **Desconexión (Aclamados por crítica, baja recepción de usuarios)**")
+        if not overrated.empty:
+            game = overrated.iloc[0]
+            st.write(f"Ejemplo: **{game['name']}** (Crítica: {game['metacritic']} vs Usuarios: {game['rating_scaled']:.1f})")
+        else:
+            st.write("No hay valores atípicos notables en este cuadrante.")
+            
+    with col_out2:
+        st.warning("💎 **Títulos de Culto (Ignorados por crítica, amados por usuarios)**")
+        if not cult_classic.empty:
+            game = cult_classic.iloc[0]
+            st.write(f"Ejemplo: **{game['name']}** (Crítica: {game['metacritic']} vs Usuarios: {game['rating_scaled']:.1f})")
+        else:
+             st.write("No hay valores atípicos notables en este cuadrante.")
 else:
     st.warning("Datos insuficientes para la gráfica 3.")
 
@@ -270,8 +293,10 @@ else:
 # 10. GRÁFICA 4: ECOSISTEMA DE PLATAFORMAS (Usa df_gen)
 # ==========================================
 st.header("4. Plataformas Dominantes")
+st.markdown("**Objetivo:** Cuantificar qué plataformas de hardware o tiendas concentran el mayor volumen de títulos de excelencia. Use el umbral a continuación para definir qué considera un juego 'Bien Valorado'.")
+
 umbral_excelencia = st.slider(
-    "Umbral Metacritic para considerar 'Bien Valorado':", 70, 95, 80, 5
+    "Definir Umbral de Excelencia (Metacritic):", 70, 95, 80, 5
 )
 
 df_excelentes = df_gen[df_gen["metacritic"] >= umbral_excelencia].copy()
@@ -285,15 +310,20 @@ if not df_excelentes.empty:
     )
 
     fig_plataformas = px.bar(
-        platform_counts,
-        x="Cantidad_Juegos",
-        y="Plataforma",
-        orientation="h",
-        color="Cantidad_Juegos",
-        color_continuous_scale="Purples",
-        labels={"Cantidad_Juegos": "Títulos Excelentes"},
+        platform_counts, x='Cantidad_Juegos', y='Plataforma', orientation='h',
+        color='Cantidad_Juegos', color_continuous_scale='Purples',
+        labels={'Cantidad_Juegos': 'Títulos Excelentes'},
+        text='Cantidad_Juegos'
     )
+    
+    fig_plataformas.update_traces(texttemplate='%{text}', textposition='outside')
+    fig_plataformas.update_layout(margin=dict(r=50))
     st.plotly_chart(fig_plataformas, use_container_width=True)
+    
+    # Análisis dinámico
+    top_plat = platform_counts.iloc[-1]['Plataforma']
+    top_plat_count = platform_counts.iloc[-1]['Cantidad_Juegos']
+    st.info(f"🏆 **Recomendación de Hardware:** El ecosistema de **{top_plat}** lidera actualmente con **{top_plat_count}** juegos superando el umbral de {umbral_excelencia} puntos, convirtiéndola en la plataforma con el catálogo más robusto según estos parámetros.")
 else:
     st.warning(
         "No se encontraron juegos que superen el umbral con los filtros actuales."
