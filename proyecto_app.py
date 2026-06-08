@@ -245,12 +245,13 @@ else:
     st.warning("Datos insuficientes para la gráfica 2.")
 
 # ==========================================
-# 9. GRÁFICA 3: CRÍTICA VS COMUNIDAD (Usa df_both)
+# 9. GRÁFICA 3: CRÍTICA VS COMUNIDAD Y CORRELACIÓN (Usa df_both)
 # ==========================================
 st.header("3. Matriz de Consenso: Crítica vs Comunidad")
-st.markdown("**Objetivo:** Explorar la polarización de la industria. La línea punteada representa el 'consenso absoluto'. Los puntos alejados de esta línea revelan la desconexión entre la prensa especializada y los jugadores. El tamaño del círculo representa la cantidad de votos.")
+st.markdown("**Objetivo:** Explorar la polarización de la industria mediante un diagrama de dispersión. La línea punteada representa el 'consenso absoluto'. Los puntos alejados revelan desconexión entre la prensa y los jugadores.")
 
 if not df_both.empty:
+    # 3.1. Gráfico de Dispersión
     fig_scatter = px.scatter(
         df_both, x="metacritic", y="rating_scaled",
         size="ratings_count", hover_name="name",
@@ -286,6 +287,46 @@ if not df_both.empty:
             st.write(f"Ejemplo: **{game['name']}** (Crítica: {game['metacritic']} vs Usuarios: {game['rating_scaled']:.1f})")
         else:
              st.write("No hay valores atípicos notables en este cuadrante.")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 3.2. Matriz de Correlación
+    st.subheader("📊 Matriz de Correlación Estadística")
+    st.markdown("La siguiente matriz (Pearson) cuantifica la relación lineal entre las variables numéricas clave. Valores cercanos a **1** indican fuerte correlación positiva, y valores cercanos a **-1** indican correlación negativa.")
+    
+    # Preparamos las columnas numéricas relevantes para correlacionar
+    df_numeric = df_both[['metacritic', 'rating_scaled', 'ratings_count', 'playtime', 'year']].copy()
+    df_numeric = df_numeric.apply(pd.to_numeric, errors='coerce') 
+    
+    if len(df_numeric) > 1:
+        corr_matrix = df_numeric.corr()
+        
+        # Renombramos para que se vea más profesional en español
+        corr_labels = ['Crítica (Metacritic)', 'Usuarios (Rating)', 'Total de Votos', 'Tiempo Jugado', 'Año Lanzamiento']
+        corr_matrix.columns = corr_labels
+        corr_matrix.index = corr_labels
+        
+        # Generar heatmap con Plotly Express
+        fig_corr = px.imshow(
+            corr_matrix,
+            text_auto=".2f",
+            color_continuous_scale="RdBu_r", # Rojo/Azul Divergente
+            zmin=-1, zmax=1,
+            aspect="auto"
+        )
+        st.plotly_chart(fig_corr, use_container_width=True)
+        
+        # Insight Dinámico de Correlación
+        corr_mc = corr_matrix.loc['Crítica (Metacritic)', 'Usuarios (Rating)']
+        if pd.notna(corr_mc):
+            if corr_mc > 0.6:
+                st.info(f"🔍 **Insight Analítico:** Existe una **correlación fuerte positiva ({corr_mc:.2f})** entre la crítica y la comunidad. Esto significa que están ampliamente de acuerdo en la calidad general de los títulos seleccionados.")
+            elif corr_mc > 0.3:
+                st.info(f"🔍 **Insight Analítico:** Existe una **correlación moderada ({corr_mc:.2f})** entre la crítica y la comunidad. Hay una tendencia general al acuerdo, pero con notables excepciones (Outliers).")
+            elif corr_mc > 0:
+                st.info(f"🔍 **Insight Analítico:** La correlación es **débil ({corr_mc:.2f})**. La prensa y los jugadores evalúan estos títulos con criterios distintos, generando mucha disparidad.")
+            else:
+                st.info(f"🔍 **Insight Analítico:** Existe una **correlación negativa ({corr_mc:.2f})**. Paradójicamente, mientras más alto califica la prensa, más bajo califican los usuarios (y viceversa).")
 else:
     st.warning("Datos insuficientes para la gráfica 3.")
 
